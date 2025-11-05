@@ -61,7 +61,7 @@ class BhashiniALDService {
                     const transcription = await this.transcribeWithLanguage(langCode, audioBase64, config);
                     
                     if (transcription && transcription.text) {
-                        // Calculate confidence based on text length and word count
+                        // Calculate confidence based on text and script analysis
                         const confidence = this.calculateConfidence(transcription.text, langCode);
                         
                         results.push({
@@ -72,7 +72,10 @@ class BhashiniALDService {
                             wordCount: transcription.text.split(/\s+/).length
                         });
                         
+                        // Enhanced logging with text preview
+                        const textPreview = transcription.text.substring(0, 60);
                         console.log(`🎤 ALD: ${langCode} result - confidence: ${confidence.toFixed(2)}, words: ${results[results.length-1].wordCount}`);
+                        console.log(`🎤 ALD: ${langCode} text: "${textPreview}${transcription.text.length > 60 ? '...' : ''}"`);
                     }
                 } catch (error) {
                     console.warn(`🎤 ALD: ${langCode} transcription failed:`, error.message);
@@ -230,43 +233,84 @@ class BhashiniALDService {
             return 0.0;
         }
         
-        let confidence = 0.5; // Base confidence
+        const trimmedText = text.trim();
+        const textLength = trimmedText.length;
+        const wordCount = trimmedText.split(/\s+/).filter(w => w.length > 0).length;
         
-        // Longer text = higher confidence
-        const textLength = text.trim().length;
-        if (textLength > 50) confidence += 0.2;
-        if (textLength > 100) confidence += 0.1;
+        // Define script ranges
+        const scriptRanges = {
+            'hi': /[\u0900-\u097F]/g, // Devanagari
+            'ta': /[\u0B80-\u0BFF]/g, // Tamil
+            'te': /[\u0C00-\u0C7F]/g, // Telugu
+            'kn': /[\u0C80-\u0CFF]/g, // Kannada
+            'ml': /[\u0D00-\u0D7F]/g, // Malayalam
+            'mr': /[\u0900-\u097F]/g, // Marathi
+            'gu': /[\u0A80-\u0AFF]/g, // Gujarati
+            'bn': /[\u0980-\u09FF]/g, // Bengali
+            'pa': /[\u0A00-\u0A7F]/g  // Punjabi
+        };
         
-        // More words = higher confidence
-        const wordCount = text.split(/\s+/).length;
-        if (wordCount > 5) confidence += 0.1;
-        if (wordCount > 10) confidence += 0.1;
+        // Check for any Indic script
+        const hasIndicScript = /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]/.test(trimmedText);
+        const hasAscii = /[a-zA-Z]/.test(trimmedText);
         
-        // Check for script-specific characters (bonus for Indian languages)
+        let confidence = 0.0;
+        
         if (langCode !== 'en') {
-            const scriptRanges = {
-                'hi': /[\u0900-\u097F]/, // Devanagari
-                'ta': /[\u0B80-\u0BFF]/, // Tamil
-                'te': /[\u0C00-\u0C7F]/, // Telugu
-                'kn': /[\u0C80-\u0CFF]/, // Kannada
-                'ml': /[\u0D00-\u0D7F]/, // Malayalam
-                'mr': /[\u0900-\u097F]/, // Marathi (Devanagari)
-                'gu': /[\u0A80-\u0AFF]/, // Gujarati
-                'bn': /[\u0980-\u09FF]/, // Bengali
-                'pa': /[\u0A00-\u0A7F]/  // Punjabi
-            };
+            // Indian language - check for correct script
+            const scriptPattern = scriptRanges[langCode];
             
-            if (scriptRanges[langCode] && scriptRanges[langCode].test(text)) {
-                confidence += 0.2; // Boost if script matches
+            if (scriptPattern) {
+                const scriptMatches = trimmedText.match(scriptPattern);
+                const scriptCharCount = scriptMatches ? scriptMatches.length : 0;
+                const totalChars = trimmedText.replace(/[\s\d\p{P}]/gu, '').length;
+                
+                if (scriptCharCount > 0 && totalChars > 0) {
+                    // Calculate script ratio
+                    const scriptRatio = scriptCharCount / totalChars;
+                    
+                    // Base score from script ratio (0.2 to 0.7)
+                    confidence = 0.2 + (scriptRatio * 0.5);
+                    
+                    // Bonuses for content quality
+                    if (wordCount >= 5) confidence += 0.08;
+                    if (wordCount >= 10) confidence += 0.07;
+                    if (textLength >= 30) confidence += 0.08;
+                    if (textLength >= 60) confidence += 0.07;
+                    
+                } else if (hasAscii && !hasIndicScript) {
+                    // Indian model but only ASCII - likely wrong
+                    confidence = 0.12;
+                } else {
+                    confidence = 0.20;
+                }
             }
         } else {
-            // For English, check for ASCII letters
-            if (/[a-zA-Z]/.test(text)) {
-                confidence += 0.2;
+            // English - check for ASCII and no Indic script
+            if (hasIndicScript) {
+                // English should never have Indic script
+                confidence = 0.08;
+            } else if (hasAscii) {
+                // Count common English words
+                const commonWords = /\b(the|is|are|was|were|have|has|had|will|would|can|could|should|may|must|a|an|and|or|but|in|on|at|to|for|of|with|by|my|your|this|that|do|does|did|he|she|it|we|they|from|about)\b/gi;
+                const matches = trimmedText.match(commonWords);
+                const englishWordCount = matches ? matches.length : 0;
+                const ratio = englishWordCount / Math.max(wordCount, 1);
+                
+                // Base English confidence
+                confidence = 0.35 + (ratio * 0.35);
+                
+                // Bonuses
+                if (wordCount >= 5) confidence += 0.08;
+                if (wordCount >= 10) confidence += 0.07;
+                if (textLength >= 30) confidence += 0.08;
+                if (textLength >= 60) confidence += 0.07;
+            } else {
+                confidence = 0.10;
             }
         }
         
-        return Math.min(confidence, 1.0); // Cap at 1.0
+        return Math.min(Math.max(confidence, 0.0), 1.0);
     }
     
     /**

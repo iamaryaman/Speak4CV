@@ -31,6 +31,9 @@ class VoiceCVApp {
         this.hybridExtractor = new HybridCVExtraction();
         this.hybridExtractor.setNEREngine(new MultilingualNEREngine());
         
+        // Initialize Overlay Prompts Manager
+        this.overlayPromptsManager = null;
+        
         // Check if API key is configured (load from localStorage)
         const savedApiKey = localStorage.getItem('openrouter_api_key');
         if (savedApiKey && savedApiKey.trim().length > 0) {
@@ -1663,6 +1666,14 @@ class VoiceCVApp {
         // Initialize waveform canvas
         this.initializeWaveform();
         
+        // Initialize Overlay Prompts Manager
+        if (typeof OverlayPromptsManager !== 'undefined') {
+            this.overlayPromptsManager = new OverlayPromptsManager(this);
+            if (this.overlayPromptsManager.initialize()) {
+                console.log('✅ Overlay prompts manager initialized');
+            }
+        }
+        
         // Pre-load pipeline configuration for better performance
         this.bhashiniService.getPipelineConfig(this.currentLanguage)
             .then(config => {
@@ -1978,6 +1989,11 @@ class VoiceCVApp {
                 // Show preview with improved HTML structure
                 this.showResumePreview(structuredCV);
                 
+                // Check for missing sections and show prompts
+                setTimeout(() => {
+                    this.checkAndShowMissingPrompts(structuredCV);
+                }, 1000);
+                
                 this.showStatusMessage(`✅ CV generated successfully! ${extractionSummary}`, 'success');
                 
                 // Add helpful message if some sections are missing
@@ -2004,9 +2020,161 @@ class VoiceCVApp {
                 }
             }
         } catch (error) {
-            console.error('CV generation failed:', error);
+                console.error('CV generation failed:', error);
             this.showStatusMessage('❌ Failed to process CV information. Please try again.', 'error');
         }
+    }
+    
+    /**
+     * Check for missing sections and show overlay prompts if needed
+     * @param {Object} cvData - Generated CV data
+     */
+    checkAndShowMissingPrompts(cvData) {
+        if (!this.overlayPromptsManager) {
+            console.warn('Overlay prompts manager not initialized');
+            return;
+        }
+        
+        // Analyze missing sections
+        const missingSections = this.overlayPromptsManager.analyzeMissingSections(cvData);
+        
+        if (missingSections.length > 0) {
+            // Show prompts for missing sections
+            this.overlayPromptsManager.showPrompts(missingSections);
+            this.showStatusMessage(`Please provide ${missingSections.length} missing section(s)`, 'info');
+        } else {
+            console.log('✅ All sections complete, no prompts needed');
+        }
+    }
+    
+    /**
+     * Regenerate CV with data from prompts
+     * @param {Object} promptResponses - Responses from overlay prompts
+     */
+    async regenerateCVWithPromptData(promptResponses) {
+        console.log('🔄 Regenerating CV with prompt data...', promptResponses);
+        
+        if (!this.generatedCVData) {
+            console.error('No initial CV data to update');
+            return;
+        }
+        
+        try {
+            this.showLoadingOverlay(true);
+            
+            // Merge prompt responses into CV data
+            const updatedCVData = { ...this.generatedCVData };
+            
+            // Update personal info
+            if (promptResponses.name) {
+                updatedCVData.personalInfo.fullName = promptResponses.name;
+            }
+            if (promptResponses.email) {
+                updatedCVData.personalInfo.email = promptResponses.email;
+            }
+            if (promptResponses.phone) {
+                updatedCVData.personalInfo.phone = promptResponses.phone;
+            }
+            if (promptResponses.location) {
+                updatedCVData.personalInfo.location = promptResponses.location;
+            }
+            
+            // Parse and add work experience if provided
+            if (promptResponses.workExperience) {
+                const parsedExperience = this.parseWorkExperience(promptResponses.workExperience);
+                updatedCVData.workExperience = [
+                    ...updatedCVData.workExperience || [],
+                    ...parsedExperience
+                ];
+            }
+            
+            // Parse and add education if provided
+            if (promptResponses.education) {
+                const parsedEducation = this.parseEducation(promptResponses.education);
+                updatedCVData.education = [
+                    ...updatedCVData.education || [],
+                    ...parsedEducation
+                ];
+            }
+            
+            // Parse and add skills if provided
+            if (promptResponses.skills) {
+                const parsedSkills = this.parseSkills(promptResponses.skills);
+                if (!updatedCVData.skills) {
+                    updatedCVData.skills = { technical: [], soft: [] };
+                }
+                updatedCVData.skills.technical = [
+                    ...updatedCVData.skills.technical || [],
+                    ...parsedSkills
+                ];
+            }
+            
+            // Parse and add languages if provided
+            if (promptResponses.languages) {
+                const parsedLanguages = this.parseLanguages(promptResponses.languages);
+                updatedCVData.languages = [
+                    ...updatedCVData.languages || [],
+                    ...parsedLanguages
+                ];
+            }
+            
+            // Update the generated CV data
+            this.generatedCVData = updatedCVData;
+            
+            // Regenerate preview
+            this.showResumePreview(updatedCVData);
+            
+            this.showLoadingOverlay(false);
+            this.showStatusMessage('✅ CV updated with new information!', 'success');
+            
+        } catch (error) {
+            console.error('Failed to regenerate CV:', error);
+            this.showLoadingOverlay(false);
+            this.showStatusMessage('Failed to update CV', 'error');
+        }
+    }
+    
+    /**
+     * Parse work experience from text
+     */
+    parseWorkExperience(text) {
+        // Simple parsing - can be enhanced
+        return [{
+            jobTitle: 'Position',
+            company: 'Company',
+            duration: 'Duration',
+            description: text
+        }];
+    }
+    
+    /**
+     * Parse education from text
+     */
+    parseEducation(text) {
+        return [{
+            degree: 'Degree',
+            institution: 'Institution',
+            year: 'Year',
+            description: text
+        }];
+    }
+    
+    /**
+     * Parse skills from text
+     */
+    parseSkills(text) {
+        return text.split(/[,،\s]+/).filter(s => s.trim().length > 0);
+    }
+    
+    /**
+     * Parse languages from text
+     */
+    parseLanguages(text) {
+        const langs = text.split(/[,،]/).filter(l => l.trim().length > 0);
+        return langs.map(lang => ({
+            name: lang.trim(),
+            proficiency: 'Fluent'
+        }));
     }
     
     showActionControls() {
