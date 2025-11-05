@@ -23,7 +23,7 @@ class VoiceCVApp {
             skills: {}
         };
         this.currentLanguage = 'en'; // Default to English
-        this.autoDetectEnabled = false; // ALD toggle state (OFF by default)
+        this.autoDetectEnabled = true; // ALD toggle state (ON by default)
         this.user = null;
         this.uploadedDocuments = [];
         
@@ -43,6 +43,13 @@ class VoiceCVApp {
         if (typeof BhashiniTranslationService !== 'undefined') {
             this.translationService = new BhashiniTranslationService();
             console.log('✅ Bhashini Translation Service initialized');
+        }
+        
+        // Initialize Page Translator
+        this.pageTranslator = null;
+        if (typeof PageTranslator !== 'undefined') {
+            this.pageTranslator = new PageTranslator();
+            console.log('✅ Page Translator initialized');
         }
 
         this.sections = [
@@ -67,6 +74,15 @@ class VoiceCVApp {
         
         // Load saved theme preference
         this.loadThemePreference();
+        
+        // Skip welcome, auth, and template screens - go directly to CV generation
+        setTimeout(() => {
+            this.accessibilityMode = 'normal'; // Set default accessibility mode
+            this.selectedTemplate = 'classic'; // Set default template
+            this.user = { email: 'user', name: 'User' }; // Set default user
+            this.showScreen('voiceScreen');
+            this.initializeSingleInputMode();
+        }, 100);
     }
 
     setupEventListeners() {
@@ -1596,20 +1612,36 @@ class VoiceCVApp {
         this.bhashiniService = new BhashiniService();
         this.aldService = new BhashiniALDService(); // Initialize ALD service
         this.translationService = new BhashiniTranslationService(); // Initialize translation service
-        this.autoDetectEnabled = false; // ALD OFF by default
+        this.autoDetectEnabled = true; // ALD ON by default
         this.finalText = '';
         this.generatedCVData = null;
         this.translatedCVData = null; // Store translated resume
         this.currentResumeLanguage = 'en'; // Language of the resume (default English)
         this.currentLanguage = 'en'; // Default to English
         
-        // Ensure manual language selector is visible on initialization
+        // Set up initial UI state for auto-detect toggle
         setTimeout(() => {
+            const toggle = document.getElementById('autoDetectToggle');
+            const indicator = document.getElementById('currentLangIndicator');
             const manualSelector = document.getElementById('manualLanguageSelector');
-            if (manualSelector) {
-                manualSelector.style.display = 'block';
+            
+            // Set toggle to active state
+            if (toggle) {
+                toggle.classList.add('active');
             }
-            console.log('✅ Manual language selector initialized and visible');
+            
+            // Update indicator to show auto-detect is ON
+            if (indicator) {
+                indicator.textContent = '🔄 Auto-detect: ON';
+                indicator.style.background = '#10b981'; // Green
+            }
+            
+            // Hide manual language selector since auto-detect is ON
+            if (manualSelector) {
+                manualSelector.style.display = 'none';
+            }
+            
+            console.log('✅ Auto-detect initialized as ON by default');
         }, 100);
         
         // Initialize audio-related variables
@@ -2588,6 +2620,23 @@ class VoiceCVApp {
                     );
                     
                     console.log(`🎤 ALD: Using ${languageToUse} with transcription already obtained`);
+                    
+                    // TRANSLATE WEBPAGE TO DETECTED LANGUAGE
+                    if (this.pageTranslator && languageToUse !== 'en') {
+                        console.log(`🌍 Translating webpage to ${detectedLang.languageName}...`);
+                        this.showStatusMessage(`🌍 Translating interface to ${detectedLang.languageName}...`, 'info');
+                        
+                        // Translate the entire webpage to the detected language
+                        this.pageTranslator.translatePage(languageToUse)
+                            .then(() => {
+                                console.log(`✅ Webpage translated to ${detectedLang.languageName}`);
+                                this.showStatusMessage(`✅ Interface translated to ${detectedLang.languageName}`, 'success');
+                            })
+                            .catch(error => {
+                                console.error('Failed to translate webpage:', error);
+                                this.showStatusMessage('Failed to translate interface', 'warning');
+                            });
+                    }
                     
                 } catch (aldError) {
                     console.error('🎤 ALD failed, falling back to current language:', aldError);

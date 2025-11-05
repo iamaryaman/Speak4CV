@@ -733,9 +733,39 @@
                 <div class="single-voice-content">
                     <div class="text-center mb-4">
                         <h1 id="voice-title" class="text-primary mb-2">🎤 Single Voice Input CV Builder</h1>
+                    </div>
                     
-                    <!-- Language Auto-Detection -->
-                    <div class="mb-4" id="languageSection">
+                    <!-- Input Mode Toggle and Test Button -->
+                    <div style="text-align: center; margin: 2rem 0;">
+                        <button id="inputModeToggle" class="btn btn--outline" style="margin: 0.5rem;">
+                            📝 Switch to Text Input
+                        </button>
+                        <button id="testBhashiniBtn" class="btn btn--secondary" style="margin: 0.5rem;">
+                            🔍 Test Bhashini Service
+                        </button>
+                    </div>
+                    
+                    <!-- Voice Input Mode -->
+                    <div id="voiceMode">
+                    <!-- Single Recording Section -->
+                    <div class="text-center mb-4">
+                        <div style="background: rgba(99, 102, 241, 0.05); border: 2px dashed rgba(99, 102, 241, 0.3); border-radius: 16px; padding: 25px; margin: 20px 0;">
+                            <p style="font-size: 0.9rem; color: var(--color-slate-900); margin-bottom: 15px; font-weight: 500;">
+                                🔊 <strong>SINGLE SPEECH INPUT:</strong> Speak continuously about your entire professional background
+                            </p>
+                            <button class="record-btn-large" id="recordBtn" aria-label="Start complete CV recording">
+                                <span style="font-size: 3.5rem;">🎤</span>
+                                <div style="font-size: 1.2rem; margin-top: 10px; font-weight: 700;">START COMPLETE CV RECORDING</div>
+                                <div style="font-size: 0.85rem; opacity: 0.85; margin-top: 6px; line-height: 1.4;">One continuous session • All CV information • AI auto-extracts everything</div>
+                            </button>
+                            <p style="font-size: 0.8rem; color: var(--text-tertiary); margin-top: 15px; font-style: italic;">
+                                ⚠️ No need to pause or separate topics - just speak naturally about everything!
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Language Auto-Detection (moved below record button) -->
+                    <div class="mb-4" id="languageSection" style="margin-top: 2rem;">
                         <div class="flex items-center justify-center mb-3" style="flex-direction: column; gap: 1rem;">
                             <div class="auto-detect-toggle mr-4">
                                 <div class="toggle-switch" id="autoDetectToggle"></div>
@@ -744,7 +774,7 @@
                             <div class="language-indicator-compact" id="currentLangIndicator">English</div>
                             
                             <!-- Manual Language Selector (shown when auto-detect is OFF) -->
-                            <div id="manualLanguageSelector" style="display: block;">
+                            <div id="manualLanguageSelector" style="display: none; margin-top: 1rem;">
                                 <p style="margin-bottom: 1rem; color: #646464; font-weight: 500;">Select Voice Input Language:</p>
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; max-width: 800px; margin: 0 auto;">
                                     <button class="language-select-btn" data-lang="en" style="padding: 0.75rem 1rem; border: 2px solid #dcdcdc; border-radius: 8px; background: #ffffff; cursor: pointer; transition: all 0.3s ease; font-size: 0.9rem;">
@@ -791,37 +821,6 @@
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Input Mode Toggle and Test Button -->
-                    <div style="text-align: center; margin: 2rem 0;">
-                        <button id="inputModeToggle" class="btn btn--outline" style="margin: 0.5rem;">
-                            📝 Switch to Text Input
-                        </button>
-                        <button id="testBhashiniBtn" class="btn btn--secondary" style="margin: 0.5rem;">
-                            🔍 Test Bhashini Service
-                        </button>
-                    </div>
-                    
-                    <!-- Voice Input Mode -->
-                    <div id="voiceMode">
-                    <!-- Single Recording Section -->
-                    <div class="text-center mb-4">
-                        <div style="background: rgba(99, 102, 241, 0.05); border: 2px dashed rgba(99, 102, 241, 0.3); border-radius: 16px; padding: 25px; margin: 20px 0;">
-                            <p style="font-size: 0.9rem; color: var(--color-slate-900); margin-bottom: 15px; font-weight: 500;">
-                                🔊 <strong>SINGLE SPEECH INPUT:</strong> Speak continuously about your entire professional background
-                            </p>
-                            <button class="record-btn-large" id="recordBtn" aria-label="Start complete CV recording">
-                                <span style="font-size: 3.5rem;">🎤</span>
-                                <div style="font-size: 1.2rem; margin-top: 10px; font-weight: 700;">START COMPLETE CV RECORDING</div>
-                                <div style="font-size: 0.85rem; opacity: 0.85; margin-top: 6px; line-height: 1.4;">One continuous session • All CV information • AI auto-extracts everything</div>
-                            </button>
-                            <p style="font-size: 0.8rem; color: var(--text-tertiary); margin-top: 15px; font-style: italic;">
-                                ⚠️ No need to pause or separate topics - just speak naturally about everything!
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <!-- Waveform and Status -->
                     <div class="recording-status mb-4">
                         <div class="waveform-visualizer-compact">
                             <canvas id="waveformCanvas" width="0" height="0"></canvas>
