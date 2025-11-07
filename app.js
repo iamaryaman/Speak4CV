@@ -1618,6 +1618,7 @@ class VoiceCVApp {
         this.autoDetectEnabled = true; // ALD ON by default
         this.finalText = '';
         this.generatedCVData = null;
+        this.originalCVData = null; // Store original CV data before any translation
         this.translatedCVData = null; // Store translated resume
         this.currentResumeLanguage = 'en'; // Language of the resume (default English)
         this.currentLanguage = 'en'; // Default to English
@@ -1982,6 +1983,7 @@ class VoiceCVApp {
                 // Store generated data
                 this.resumeData = structuredCV;
                 this.generatedCVData = structuredCV;
+                this.originalCVData = JSON.parse(JSON.stringify(structuredCV)); // Deep copy of original data
                 
                 // Show detailed extraction results
                 const extractionSummary = this.generateExtractionSummary(structuredCV);
@@ -2121,8 +2123,28 @@ class VoiceCVApp {
             // Update the generated CV data
             this.generatedCVData = updatedCVData;
             
+            // IMPORTANT: Also update originalCVData so translations work correctly
+            this.originalCVData = JSON.parse(JSON.stringify(updatedCVData));
+            
+            // Reset language to English since we updated with new data
+            this.currentResumeLanguage = 'en';
+            
             // Regenerate preview
             this.showResumePreview(updatedCVData);
+            
+            // Update language buttons to show English is active
+            const buttons = document.querySelectorAll('.resume-lang-btn');
+            buttons.forEach(btn => {
+                btn.style.borderColor = '#dcdcdc';
+                btn.style.background = '#ffffff';
+                btn.style.fontWeight = 'normal';
+            });
+            const enBtn = document.querySelector('.resume-lang-btn[data-lang="en"]');
+            if (enBtn) {
+                enBtn.style.borderColor = '#000';
+                enBtn.style.background = '#f0f0f0';
+                enBtn.style.fontWeight = '600';
+            }
             
             this.showLoadingOverlay(false);
             this.showStatusMessage('✅ CV updated with new information!', 'success');
@@ -2138,8 +2160,33 @@ class VoiceCVApp {
      * Parse work experience from text
      */
     parseWorkExperience(text) {
-        // Simple parsing - can be enhanced
-        return [{
+        // Try to parse multiple jobs if separated by newlines or periods
+        const jobs = [];
+        const lines = text.split(/\n+|\. /).filter(l => l.trim().length > 0);
+        
+        if (lines.length === 1) {
+            // Single job entry
+            return [{
+                jobTitle: 'Position',
+                company: 'Company',
+                duration: 'Duration',
+                description: text.trim()
+            }];
+        }
+        
+        // Multiple entries - try to parse each
+        lines.forEach(line => {
+            if (line.trim()) {
+                jobs.push({
+                    jobTitle: 'Position',
+                    company: 'Company',
+                    duration: 'Duration',
+                    description: line.trim()
+                });
+            }
+        });
+        
+        return jobs.length > 0 ? jobs : [{
             jobTitle: 'Position',
             company: 'Company',
             duration: 'Duration',
@@ -2151,7 +2198,31 @@ class VoiceCVApp {
      * Parse education from text
      */
     parseEducation(text) {
-        return [{
+        // Try to parse multiple education entries
+        const eduEntries = [];
+        const lines = text.split(/\n+|\. /).filter(l => l.trim().length > 0);
+        
+        if (lines.length === 1) {
+            return [{
+                degree: 'Degree',
+                institution: 'Institution',
+                year: 'Year',
+                description: text.trim()
+            }];
+        }
+        
+        lines.forEach(line => {
+            if (line.trim()) {
+                eduEntries.push({
+                    degree: 'Degree',
+                    institution: 'Institution',
+                    year: 'Year',
+                    description: line.trim()
+                });
+            }
+        });
+        
+        return eduEntries.length > 0 ? eduEntries : [{
             degree: 'Degree',
             institution: 'Institution',
             year: 'Year',
@@ -2163,14 +2234,15 @@ class VoiceCVApp {
      * Parse skills from text
      */
     parseSkills(text) {
-        return text.split(/[,،\s]+/).filter(s => s.trim().length > 0);
+        // Split by commas, semicolons, newlines, or multiple spaces
+        return text.split(/[,،;\n]+/).map(s => s.trim()).filter(s => s.length > 0);
     }
     
     /**
      * Parse languages from text
      */
     parseLanguages(text) {
-        const langs = text.split(/[,،]/).filter(l => l.trim().length > 0);
+        const langs = text.split(/[,،;\n]+/).filter(l => l.trim().length > 0);
         return langs.map(lang => ({
             name: lang.trim(),
             proficiency: 'Fluent'
@@ -2316,8 +2388,7 @@ class VoiceCVApp {
             return;
         }
         
-        const originalData = this.generatedCVData;
-        if (!originalData) {
+        if (!this.originalCVData) {
             this.showStatusMessage('No resume to translate. Please generate your CV first.', 'error');
             return;
         }
@@ -2325,6 +2396,42 @@ class VoiceCVApp {
         // If already in target language, no need to translate
         if (this.currentResumeLanguage === targetLang) {
             this.showStatusMessage(`Resume is already in ${targetLang}`, 'info');
+            return;
+        }
+        
+        // If switching to English, restore original data without translation
+        if (targetLang === 'en') {
+            this.generatedCVData = JSON.parse(JSON.stringify(this.originalCVData));
+            this.currentResumeLanguage = 'en';
+            
+            // Update preview with original content
+            const previewHTML = this.generatePreviewHTML(this.originalCVData);
+            const previewContent = document.getElementById('previewContent');
+            if (previewContent) {
+                previewContent.innerHTML = previewHTML;
+            }
+            
+            // Update button states
+            const buttons = document.querySelectorAll('.resume-lang-btn');
+            buttons.forEach(btn => {
+                btn.style.borderColor = '#dcdcdc';
+                btn.style.background = '#ffffff';
+                btn.style.fontWeight = 'normal';
+            });
+            const selectedBtn = document.querySelector('.resume-lang-btn[data-lang="en"]');
+            if (selectedBtn) {
+                selectedBtn.style.borderColor = '#000';
+                selectedBtn.style.background = '#f0f0f0';
+                selectedBtn.style.fontWeight = '600';
+            }
+            
+            const statusEl = document.getElementById('translationStatus');
+            if (statusEl) {
+                statusEl.innerHTML = '✅ Restored to original English version';
+                statusEl.style.color = '#10b981';
+            }
+            
+            this.showStatusMessage('✅ Restored to original English version', 'success');
             return;
         }
         
@@ -2352,11 +2459,12 @@ class VoiceCVApp {
             
             this.showLoadingOverlay(true);
             
-            const sourceLang = this.currentResumeLanguage;
+            // Always translate from the original English data
+            const sourceLang = 'en';
             console.log(`Translating resume from ${sourceLang} to ${targetLang}`);
             
-            // Create a deep copy to translate
-            const translatedData = JSON.parse(JSON.stringify(originalData));
+            // Create a deep copy from original data to translate
+            const translatedData = JSON.parse(JSON.stringify(this.originalCVData));
             
             // Translate personal info
             if (translatedData.personalInfo) {
@@ -2430,6 +2538,7 @@ class VoiceCVApp {
             
             // Store translated data
             this.translatedCVData = translatedData;
+            this.generatedCVData = translatedData; // Update current displayed CV
             this.currentResumeLanguage = targetLang;
             
             // Update preview with translated content
@@ -2488,6 +2597,7 @@ class VoiceCVApp {
         }
         
         this.generatedCVData = null;
+        this.originalCVData = null;
         this.translatedCVData = null;
         this.currentResumeLanguage = 'en';
         this.showStatusMessage('Starting fresh - ready for new CV recording!', 'info');

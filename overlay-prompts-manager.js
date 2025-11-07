@@ -307,6 +307,9 @@ class OverlayPromptsManager {
                 <textarea class="prompt-response-text" id="response-text-${sectionKey}" 
                     placeholder="Your response will appear here..."></textarea>
                 <div class="prompt-response-actions">
+                    <button class="prompt-action-btn prompt-correct-ai-btn" data-action="correct-ai" data-section="${sectionKey}">
+                        ✨ Correct with AI
+                    </button>
                     <button class="prompt-action-btn prompt-accept-btn" data-action="accept" data-section="${sectionKey}">
                         ✓ Accept
                     </button>
@@ -344,6 +347,10 @@ class OverlayPromptsManager {
         // Decline button
         const declineBtn = promptElement.querySelector('[data-action="decline"]');
         declineBtn.addEventListener('click', () => this.handleDecline(sectionKey));
+        
+        // Correct with AI button
+        const correctAIBtn = promptElement.querySelector('[data-action="correct-ai"]');
+        correctAIBtn.addEventListener('click', () => this.handleCorrectWithAI(sectionKey));
     }
     
     /**
@@ -642,14 +649,93 @@ class OverlayPromptsManager {
             responseContainer.classList.remove('visible');
         }
         
-        // Reset buttons
+        // Reset buttons - allow re-recording
         const voiceBtn = document.querySelector(`#prompt-${sectionKey} [data-input-type="voice"]`);
         const textBtn = document.querySelector(`#prompt-${sectionKey} [data-input-type="text"]`);
         
-        if (voiceBtn) voiceBtn.classList.remove('active');
-        if (textBtn) textBtn.classList.remove('active');
+        if (voiceBtn) {
+            voiceBtn.classList.remove('active');
+            voiceBtn.disabled = false;
+        }
+        if (textBtn) {
+            textBtn.classList.remove('active');
+            textBtn.disabled = false;
+        }
         
-        this.app.showStatusMessage('Response cleared', 'info');
+        this.app.showStatusMessage('Response cleared - you can record again', 'info');
+    }
+    
+    /**
+     * Handle correct with AI action
+     * @param {string} sectionKey - Section identifier
+     */
+    async handleCorrectWithAI(sectionKey) {
+        const responseText = document.getElementById(`response-text-${sectionKey}`);
+        
+        if (!responseText || !responseText.value.trim()) {
+            this.app.showStatusMessage('Please provide input before correcting', 'error');
+            return;
+        }
+        
+        const originalText = responseText.value.trim();
+        
+        try {
+            this.app.showStatusMessage('✨ Correcting with AI...', 'info');
+            
+            // Check if Ollama service is available
+            if (!window.ollamaOptimizer) {
+                throw new Error('Ollama service not available');
+            }
+            
+            // Test connection first
+            const isConnected = await window.ollamaOptimizer.testConnection();
+            if (!isConnected) {
+                throw new Error('Cannot connect to Ollama server. Please check if Ollama is running.');
+            }
+            
+            // Build correction prompt
+            const prompt = `Correct any grammatical errors, spelling mistakes, and improve clarity in the following text. Keep the meaning and content the same, only fix errors and improve readability. Return ONLY the corrected text without any explanation or additional commentary.\n\nText to correct: "${originalText}"`;
+            
+            // Call Ollama API
+            const baseURL = window.ollamaOptimizer.ollamaBaseURL.replace(/\/$/, '');
+            const response = await fetch(`${baseURL}/api/generate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                },
+                body: JSON.stringify({
+                    model: window.ollamaOptimizer.modelName,
+                    prompt: prompt,
+                    stream: false,
+                    options: {
+                        temperature: 0.3,
+                        top_p: 0.9,
+                        num_predict: 500
+                    }
+                }),
+                redirect: 'follow'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            const correctedText = data.response.trim();
+            
+            // Update textarea with corrected text
+            if (correctedText && correctedText.length > 0) {
+                responseText.value = correctedText;
+                this.app.showStatusMessage('✅ Text corrected successfully!', 'success');
+            } else {
+                throw new Error('No correction received');
+            }
+            
+        } catch (error) {
+            console.error('AI correction error:', error);
+            this.app.showStatusMessage(`Failed to correct: ${error.message}`, 'error');
+        }
     }
     
     /**
